@@ -29,35 +29,67 @@ MOTION DETECTION:
         "if cv2.contourArea(contour) < 1000: .... continue"; continue-break the iteration and continue the loop,
 8. draw the rectangles over the big white areas, that are shown over the current video (frame)
         "(x, y, w, h) = cv2.boundingRect(contour)" - we extract the rectangle values of the bounding rectangle
-9. the time when the object enters/exits the screen
+9. the time when the object enters/exits the screen:
+        We want to make a excel file with times, for every entrance in front of the camera to write start/exit time
+        - we need to see in the code where are the moments of the start and stop of the motion, so we make a
+        variable status=0, but when motion occures, then change it to 1
+        - when status changes "0 -> 1 = record START time" and "1 -> 0 = record END time"
+        - we make a list of all statuses [0000011110001111111111], we look a sample of the last two items, if they
+        are the same, don't do anything, if they change from 0-1 or 1-0, record time (if statement, datetime.now()),
+        we put those recorded times in a new list of times.
+        - we get an error, that we can't get values from the list, so we make first two elements like [None, None]
+        - we want to make sure that the end of the recording, records the exit time, if status is 1
+        - throw the list of times in a pandas dataframe, and then to CSV file. We need that to put the data in EXCEL,
+        first we need empty pandas dataframe with columns Start, End, and when we create the times list,
+        outside the loop, we append those times in the pandas dataframe, we need a loop for appending
 
 """
-import cv2, time
+import cv2, time, pandas
+from datetime import datetime
 
 first_frame = None
 video = cv2.VideoCapture(0)
-
+waiting = True
+status_list = [None, None]     
+times = []
+df = pandas.DataFrame(columns=["Start", "End"])
 
 while True:
     check, frame = video.read()
+    status = 0    
+
+    if waiting is True:
+        time.sleep(5)   
+        check, frame = video.read()
+        waiting = False
+        continue
+
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (21, 21), 0)
     if first_frame is None:
         first_frame = gray
         cv2.imshow("First frame", gray)
-        continue
+        continue       
 
     delta_frame = cv2.absdiff(first_frame, gray)
-    thresh_frame = cv2.threshold(delta_frame, 30, 255, cv2.THRESH_BINARY)[1]
+    thresh_frame = cv2.threshold(delta_frame, 70, 255, cv2.THRESH_BINARY)[1]
     thresh_frame = cv2.dilate(thresh_frame, None, iterations=2)
 
-    (cnts,_) = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    (cnts,_) = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)  
 
-    for contour in cnts:      
-        if cv2.contourArea(contour) < 1000:
+    for contour in cnts:    
+        if cv2.contourArea(contour) < 10000:
             continue      
-        (x, y, w, h) = cv2.boundingRect(contour)  
-        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 3)
+        status = 1  
+        (x, y, w, h) = cv2.boundingRect(contour)   
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 3)  
+
+    status_list.append(status)
+
+    if status_list[-1] == 0 and status_list[-2] == 1:
+        times.append(datetime.now())
+    if status_list[-1] == 1 and status_list[-2] == 0:
+        times.append(datetime.now())
 
     cv2.imshow("Video", gray)
     cv2.imshow("Threshold frame", thresh_frame)
@@ -66,8 +98,19 @@ while True:
 
     key = cv2.waitKey(20)
     if key == ord('q'):
+        if status == 1:
+            times.append(datetime.now())
         break
 
+    print(status)
+
+print(status_list)
+print(times)
+
+for i in range(0, len(times), 2):
+    df = df.append({"Start":times[i], "End":times[i+1]}, ignore_index=True)
+
+df.to_csv("Times.csv")
 
 video.release()
 cv2.destroyAllWindows()
