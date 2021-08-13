@@ -42,6 +42,15 @@ MOTION DETECTION:
         - throw the list of times in a pandas dataframe, and then to CSV file. We need that to put the data in EXCEL,
         first we need empty pandas dataframe with columns Start, End, and when we create the times list,
         outside the loop, we append those times in the pandas dataframe, we need a loop for appending
+        - the list of statuses (list full of 0 and 1) is getting too long over time of the recording. So we change
+        the list overwritting it with a list containing only two last elements, before the list is used:
+
+            status_list = status_list[-2:]      - this is memory efficient
+
+MAKING A PLOT:
+First we need to think of the structure of our script. We need to think about:
+- which plot to use? ...We will use quadrant
+- what are the input parameters? ...We have them in a dataframe with datetimes (which we save to csv)
 
 """
 import cv2, time, pandas
@@ -50,16 +59,16 @@ from datetime import datetime
 first_frame = None
 video = cv2.VideoCapture(0)
 waiting = True
-status_list = [None, None]     
+status_list = [None, None]
 times = []
 df = pandas.DataFrame(columns=["Start", "End"])
 
 while True:
     check, frame = video.read()
-    status = 0    
+    status = 0
 
     if waiting is True:
-        time.sleep(5)   
+        time.sleep(5)
         check, frame = video.read()
         waiting = False
         continue
@@ -69,22 +78,24 @@ while True:
     if first_frame is None:
         first_frame = gray
         cv2.imshow("First frame", gray)
-        continue       
+        continue
 
     delta_frame = cv2.absdiff(first_frame, gray)
     thresh_frame = cv2.threshold(delta_frame, 70, 255, cv2.THRESH_BINARY)[1]
     thresh_frame = cv2.dilate(thresh_frame, None, iterations=2)
 
-    (cnts,_) = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)  
+    (cnts,_) = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    for contour in cnts:    
+    for contour in cnts:
         if cv2.contourArea(contour) < 10000:
-            continue      
-        status = 1  
-        (x, y, w, h) = cv2.boundingRect(contour)   
-        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 3)  
+            continue
+        status = 1
+        (x, y, w, h) = cv2.boundingRect(contour)
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 3)
 
     status_list.append(status)
+
+    status_list = status_list[-2:]
 
     if status_list[-1] == 0 and status_list[-2] == 1:
         times.append(datetime.now())
